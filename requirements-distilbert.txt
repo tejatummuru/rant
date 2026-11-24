@@ -1,0 +1,6 @@
+# Extra dependencies for train_distilbert.py and app_distilbert.py.
+# Install on top of requirements.txt.
+transformers>=4.40
+datasets>=2.18
+torch>=2.2
+accelerate>=0.29

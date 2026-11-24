@@ -13,7 +13,7 @@ pinned: false
 
 An NLP classifier that reads a user's rant and names the emotion behind it. Returns a validating response (e.g., *"Your feelings of anger are valid."*).
 
-Live demo: _after you deploy to Hugging Face Spaces (see below), paste the Space URL here._
+**Live demo:** https://huggingface.co/spaces/tt26586/rant-emotion-classifier
 
 ## Problem
 
@@ -91,8 +91,40 @@ Then open the URL it prints (usually `http://127.0.0.1:7860`).
 
 If `model.joblib` is > 10 MB, HF will auto-track it with Git LFS. If it's > 100 MB, you may need to either compress harder (`joblib.dump(..., compress=9)`), reduce `n_estimators` in `train.py`, or host the artifact on HF Hub and load it from there at startup.
 
+## DistilBERT upgrade (in progress)
+
+A `train_distilbert.py` script is included that fine-tunes `distilbert-base-uncased` on the same data + 28→7 mapping, so results are directly comparable to the sklearn baseline above.
+
+Install the extra deps:
+
+```bash
+pip install -r requirements-distilbert.txt
+```
+
+Train (auto-detects CUDA / Apple MPS / CPU):
+
+```bash
+python train_distilbert.py                              # 3 epochs, local save
+python train_distilbert.py --push tt26586/rant-distilbert  # also push to HF Hub
+```
+
+Expected runtime:
+- Colab free T4: ~45–60 min
+- Apple MPS (M1/M2/M3): 2–4 hours
+- CPU-only: not recommended (overnight)
+
+Expected accuracy: weighted F1 ~0.72–0.78 (vs. 0.55 for the sklearn baseline).
+
+Once trained, swap to the DistilBERT app:
+
+```bash
+python app_distilbert.py
+```
+
+For the live Space, push the fine-tuned model to HF Hub and replace `app.py` with `app_distilbert.py` in the Space repo.
+
 ## Known limitations
 
-- TF-IDF + stacking caps around 0.55 weighted F1. Fine-tuning `distilbert-base-uncased` should land ~0.75–0.80.
-- No validation split beyond train/test (80/20).
-- `surprise` class is near-unusable (F1 ~0.20) — needs targeted augmentation or merging into `joy`.
+- `surprise` class is near-unusable in the baseline (F1 ~0.20) — fine-tuning should help, but may still underperform due to class imbalance.
+- No validation split beyond train/val/test (80/10/10 for DistilBERT, 80/20 for sklearn).
+- Both models treat text as context-free; a better approach would prefix the input with placement/source metadata.
