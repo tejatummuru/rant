@@ -150,7 +150,12 @@ def main(args: argparse.Namespace) -> None:
 
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer, padding="longest")
 
-    training_args = TrainingArguments(
+    # Build TrainingArguments defensively — some kwargs have been renamed/
+    # removed across transformers versions (e.g. warmup_ratio dropped in newer
+    # releases, eval_strategy vs evaluation_strategy). We feed them through
+    # a kwarg filter so this script works across versions.
+    import inspect
+    desired = dict(
         output_dir=str(OUT_DIR / "checkpoints"),
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
@@ -159,6 +164,7 @@ def main(args: argparse.Namespace) -> None:
         warmup_ratio=0.1,
         weight_decay=0.01,
         eval_strategy="epoch",
+        evaluation_strategy="epoch",  # older alias
         save_strategy="epoch",
         load_best_model_at_end=True,
         metric_for_best_model="weighted_f1",
@@ -170,15 +176,26 @@ def main(args: argparse.Namespace) -> None:
         dataloader_num_workers=2 if device != "cpu" else 0,
         push_to_hub=False,
     )
+    sig = inspect.signature(TrainingArguments.__init__)
+    accepted = {k: v for k, v in desired.items() if k in sig.parameters}
+    training_args = TrainingArguments(**accepted)
 
+    # Trainer: `tokenizer=` is deprecated in newer transformers in favor of
+    # `processing_class=`. Pick whichever the installed version supports.
+    trainer_sig = inspect.signature(Trainer.__init__)
+    tokenizer_kwarg = {
+        "processing_class": tokenizer
+    } if "processing_class" in trainer_sig.parameters else {
+        "tokenizer": tokenizer
+    }
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=val_ds,
-        tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics_factory(labels),
+        **tokenizer_kwarg,
     )
 
     print("Training...")
